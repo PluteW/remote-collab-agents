@@ -1,0 +1,18 @@
+# Runtime data
+runtime/
+*.log
+*.pid
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Lock files
+*.lock

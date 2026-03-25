@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Remote Collaboration Hosts Configuration
+# Generated: 2026-03-25 12:08:48
+
+# Host definitions: HOSTS_<alias>="<user>@<hostname_or_ip>:<port>"
+# NOTE: Do not list the local machine. This file is for Mac (macbook-alice).
+HOSTS_workstation-b="bob@workstation-b:22"
+HOSTS_workstation_a="alice@workstation-a:22"
+
+# Syncthing (filled automatically during setup)
+SYNCTHING_LOCAL_API="http://127.0.0.1:8384"
+SYNCTHING_LOCAL_KEY=""
+
+# Safe commands — execute without confirmation
+SAFE_COMMANDS=(
+  ls pwd df hostname uptime date free which
+  "tailscale status"
+  "syncthing --version"
+  nvidia-smi
+  "rostopic list"
+  "rosnode list"
+  "conda info"
+)
+
+# Dangerous patterns (grep -E against full command string)
+DANGEROUS_PATTERNS=(
+  "^rm " "sudo " "reboot" "shutdown" "mkfs"
+  "^dd " "kill " "> /dev/" "chmod 777"
+)
+
+# Shell metacharacters that always require confirmation
+SHELL_META_PATTERNS='[;|&$`]|\$\(|<<'
+
+DEFAULT_TIMEOUT=300
+RSYNC_FLAGS="-avzP --partial-dir=.rsync-partial --delay-updates"
+MAX_TASKS=20
+MAX_TASK_DAYS=7
+MAX_TASK_LOG_MB=100
