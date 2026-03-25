@@ -1,62 +1,83 @@
 # Remote Collab Agents
 
-**Distributed AI Agent Collaboration Framework**
-**分布式 AI 智能体协作框架**
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-lightgrey.svg)]()
+[![Shell](https://img.shields.io/badge/Shell-Bash%203.2%2B-green.svg)]()
+[![Claude Code](https://img.shields.io/badge/Agent-Claude%20Code-blueviolet.svg)](https://docs.anthropic.com/en/docs/claude-code)
 
-> An exploration of multi-human, multi-agent collaborative paradigms — where AI agents are not just tools, but evolving nodes in a distributed collaboration network.
->
-> 探索多人多智能体协作范式 —— AI Agent 不只是工具，而是分布式协作网络中协同进化的节点。
+**You have 3 machines and Claude Code on each. How do they work together?**
 
----
+This project gives AI coding agents the ability to **reach across machines** — executing commands, syncing files, and monitoring each other — while humans stay in control of trust-critical decisions.
 
-## Vision / 愿景
+> Born from real deployment across 3 machines (macOS + Ubuntu). Every design decision and troubleshooting entry reflects an actual challenge encountered.
 
-When you have multiple machines (workstations, laptops, servers) and multiple AI coding agents (Claude Code, Codex, etc.), how should they collaborate?
+## Demo
 
-当你有多台机器（工作站、笔记本、服务器）和多个 AI 编程智能体（Claude Code、Codex 等）时，它们应该如何协作？
+```bash
+# Agent on your MacBook delegates a GPU task to a remote workstation
+$ remote-exec workstation-a "nvidia-smi"
+[remote] workstation-a (alice@100.64.0.1:22) $ nvidia-smi
++-----------------------------------------------------------------------------+
+| NVIDIA-SMI 550.54    Driver Version: 550.54    CUDA Version: 12.4           |
+| GPU  Name        Persistence-M | Bus-Id        Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp  Perf  Pwr:Usage/Cap |         Memory-Usage | GPU-Util  Compute M. |
+|   0  GeForce RTX 3060   Off    | 00000000:01:00.0  On |                  N/A |
+| 30%   45C    P8    15W / 170W  |    512MiB / 12288MiB |      0%      Default |
++-----------------------------------------------------------------------------+
 
-This project explores a practical answer: **a mesh of machines and agents that can see, reach, and help each other** — with humans remaining in the loop for trust-critical decisions.
+# Launch a training job in the background — survives SSH disconnects
+$ remote-exec workstation-a --bg "python3 train.py --epochs 100"
+[bg] Started task train_20260325_143022 on workstation-a (PID: 48291)
 
-本项目探索一个实践路径：**构建机器与智能体互相可见、可达、可协助的网格** —— 人类在信任关键决策中始终保持在环。
+# Check all machines at once
+$ remote-exec all "uptime"
+[remote] workstation-a: 14:30:22 up 12 days, load average: 0.15, 0.10, 0.08
+[remote] workstation-b: 14:30:23 up 3 days,  load average: 0.42, 0.38, 0.35
+[remote] macbook:       14:30:22 up 1 day,   load average: 1.20, 1.15, 1.10
 
-### What This Is / 这是什么
+# Sync files between machines
+$ remote-sync push workstation-a ./model.pt /home/alice/Desktop/Share/
+[rsync] Transferred model.pt → workstation-a (256.3 MB, 12.8 MB/s)
 
-A set of CLI tools and Claude Code skills that enable:
+# Full health diagnostics across the mesh
+$ remote-collab-doctor
+[doctor] Checking 17 items across 3 machines...
+  ✓ SSH connectivity      3/3
+  ✓ Tailscale mesh        3/3
+  ✓ Scripts deployed      3/3
+  ✓ Syncthing sync        3/3
+  Result: 17/17 PASS
+```
 
-一套 CLI 工具和 Claude Code 技能，实现：
+## Why This Exists
 
-- **Cross-machine command execution** — an agent on machine A can run commands on machine B
-- **Bidirectional file sync** — rsync for on-demand transfer, Syncthing for continuous sync
-- **Background task management** — long-running jobs survive SSH disconnects, with PID-safe monitoring
-- **Distributed diagnostics** — health checks across the entire machine mesh
-- **Automated setup** — SSH key distribution, config generation, full mesh establishment
+Most multi-agent frameworks focus on **orchestrating LLM calls**. This one focuses on something different: **giving agents physical reach across your machines**.
 
-- **跨机器命令执行** — 机器 A 上的智能体可以在机器 B 上运行命令
-- **双向文件同步** — rsync 按需传输，Syncthing 持续同步
-- **后台任务管理** — 长时间任务在 SSH 断开后存活，带 PID 安全监控
-- **分布式诊断** — 跨整个机器网格的健康检查
-- **自动化部署** — SSH 密钥分发、配置生成、全网格建立
+| What others do | What this does |
+|:---|:---|
+| Agent A calls Agent B's API | Agent A runs commands on Machine B |
+| Shared memory / message passing | Shared filesystem via rsync + Syncthing |
+| Central orchestrator | Peer-to-peer mesh — every machine is equal |
+| Simulated environments | Real SSH on real machines |
 
-## The Collaborative Paradigm / 协作范式
-
-### Agents as Network Nodes / 智能体即网络节点
+## How It Works
 
 ```
-┌──────────────────────┐     Tailscale VPN     ┌──────────────────────┐
-│   Workstation A      │◄────────────────────►│   Workstation B      │
-│   ┌──────────────┐   │     SSH + rsync       │   ┌──────────────┐   │
-│   │ Claude Code  │   │                       │   │ Claude Code  │   │
-│   │   Agent      │───┼── remote-exec ───────►│   │   Agent      │   │
-│   └──────────────┘   │                       │   └──────────────┘   │
-│   ┌──────────────┐   │                       │                      │
-│   │ Human (SSH)  │   │                       │                      │
-│   └──────────────┘   │                       │                      │
-└──────────────────────┘                       └──────────────────────┘
-          ▲                                              ▲
-          │              Syncthing (continuous)           │
-          ▼                                              ▼
-┌──────────────────────┐                                 │
-│   MacBook            │◄────────────────────────────────┘
+┌──────────────────────┐     Tailscale VPN      ┌──────────────────────┐
+│   Workstation A       │◄─────────────────────►│   Workstation B       │
+│   ┌──────────────┐   │      SSH + rsync       │   ┌──────────────┐   │
+│   │ Claude Code  │   │                        │   │ Claude Code  │   │
+│   │   Agent      │───┼── remote-exec ────────►│   │   Agent      │   │
+│   └──────────────┘   │                        │   └──────────────┘   │
+│   ┌──────────────┐   │                        │                      │
+│   │ Human (SSH)  │   │                        │                      │
+│   └──────────────┘   │                        │                      │
+└──────────────────────┘                        └──────────────────────┘
+          ▲                                               ▲
+          │              Syncthing (continuous)            │
+          ▼                                               ▼
+┌──────────────────────┐                                  │
+│   MacBook             │◄────────────────────────────────┘
 │   ┌──────────────┐   │
 │   │ Claude Code  │   │
 │   │   Agent      │   │
@@ -64,190 +85,197 @@ A set of CLI tools and Claude Code skills that enable:
 └──────────────────────┘
 ```
 
-In this paradigm, each machine runs its own AI agent. Agents can:
+Each machine runs its own AI agent. Agents can:
 
-在这种范式下，每台机器运行自己的 AI 智能体。智能体可以：
+- **Delegate tasks** — "Run this training on the GPU workstation"
+- **Share files** — Push data to shared folders, pull results back
+- **Monitor each other** — Health checks, background task status, sync state
+- **Evolve together** — One agent improves a skill, deploys updates to all others
 
-1. **Delegate tasks across machines** — "Run this training job on the GPU workstation"
-2. **Share files seamlessly** — Push data to shared folders, pull results back
-3. **Monitor each other** — Health checks, background task status, sync state
-4. **Evolve together** — When one agent improves a skill, it can deploy updates to others
+## Features
 
-1. **跨机器委托任务** — "在 GPU 工作站上运行这个训练任务"
-2. **无缝共享文件** — 推送数据到共享文件夹，拉取结果
-3. **互相监控** — 健康检查、后台任务状态、同步状态
-4. **协同进化** — 当一个智能体改进了技能，可以部署更新到其他智能体
+- **Cross-machine command execution** — foreground, background, or broadcast to all
+- **Background task management** — PID-verified, survives SSH disconnects, with log tailing
+- **Bidirectional file sync** — rsync for on-demand, Syncthing for continuous
+- **Three-tier safety model** — safe / needs-confirmation / dangerous command classification
+- **Shell injection prevention** — metacharacters always trigger human review
+- **Distributed diagnostics** — `doctor` checks SSH, Tailscale, Syncthing, scripts, PATH across all machines
+- **Automated setup wizard** — 11-step process: key generation, config, deployment, mesh establishment
+- **macOS + Linux** — works on bash 3.2 (macOS) and 4+ (Linux), handles GNU/BSD differences
 
-### Human-in-the-Loop Trust Model / 人在环信任模型
+## Quick Start
 
-Not all actions are equal. The system implements a **three-tier trust model**:
-
-并非所有操作都是等价的。系统实现了**三级信任模型**：
-
-| Tier / 层级 | Examples / 示例 | Behavior / 行为 |
-|:---|:---|:---|
-| **Safe** / 安全 | `ls`, `hostname`, `df` | Execute directly / 直接执行 |
-| **Needs Confirmation** / 需确认 | `python3 train.py`, `pip install` | Ask human first / 先询问人类 |
-| **Dangerous** / 危险 | `rm -rf`, `sudo`, `reboot` | Explicit warning + confirmation / 明确警告 + 确认 |
-
-Shell metacharacters (`;`, `&&`, `|`, `$()`) **always** require confirmation, preventing injection attacks like `echo $(rm -rf /)` from being classified as "safe".
-
-Shell 元字符（`;`、`&&`、`|`、`$()`）**始终**需要确认，防止 `echo $(rm -rf /)` 之类的注入攻击被归类为"安全"。
-
-## Architecture / 架构
-
-### Technology Stack / 技术栈
-
-| Layer / 层 | Technology / 技术 | Role / 角色 |
-|:---|:---|:---|
-| Network / 网络 | Tailscale | Mesh VPN, NAT traversal, encryption / 网格 VPN、NAT 穿透、加密 |
-| Transport / 传输 | SSH | Authenticated command execution / 认证命令执行 |
-| File Sync / 文件同步 | rsync + Syncthing | On-demand + continuous sync / 按需 + 持续同步 |
-| Agent / 智能体 | Claude Code | AI coding assistant with skill system / AI 编程助手及技能系统 |
-| Config / 配置 | Bash (restricted parser) | Simple, no YAML deps / 简单，无 YAML 依赖 |
-
-### File Structure / 文件结构
-
-```
-remote-collab-agents/
-├── scripts/
-│   ├── common.sh              # Shared library: config parser, host resolver, safety checks
-│   ├── remote-exec.sh         # Remote command execution (foreground/background/broadcast)
-│   ├── remote-sync.sh         # rsync transfers + Syncthing management
-│   ├── remote-wrapper.sh      # Background task lifecycle (deployed to all machines)
-│   ├── doctor.sh              # Distributed health diagnostics
-│   └── setup-ssh-keys.sh      # First-time setup wizard (11 steps)
-├── skills/
-│   ├── remote-exec.md         # Claude Code skill trigger: remote execution
-│   └── remote-sync.md         # Claude Code skill trigger: file sync
-├── docs/
-│   ├── design.md              # Architecture design document
-│   ├── reference.md           # Operations reference + troubleshooting
-│   └── deployment-guide.md    # Step-by-step deployment guide
-└── config/
-    └── hosts.conf.example     # Configuration template
-```
-
-## Quick Start / 快速开始
-
-### Prerequisites / 前提条件
+### Prerequisites
 
 - 2+ machines with [Tailscale](https://tailscale.com/) installed
 - SSH server enabled on each machine
 - Bash 3.2+ (macOS compatible)
 - [Syncthing](https://syncthing.net/) (optional, for continuous sync)
 
-### Setup / 安装
+### Install
 
 ```bash
-# Clone the repo
-git clone https://github.com/YOUR_USERNAME/remote-collab-agents.git
+git clone https://github.com/PluteW/remote-collab-agents.git
 cd remote-collab-agents
 
-# Copy skills to Claude Code (on each machine)
+# Deploy skills to Claude Code (on each machine)
 mkdir -p ~/.claude/skills/remote-collab/scripts
 cp scripts/* ~/.claude/skills/remote-collab/scripts/
 cp skills/* ~/.claude/skills/remote-collab/
 
-# Run setup wizard
+# Run the setup wizard
 bash scripts/setup-ssh-keys.sh
 ```
 
-The setup wizard handles:
-1. SSH key generation and distribution
-2. Config file creation with auto-detected Tailscale peers
-3. Full script deployment to all remote machines
-4. Cross-machine SSH mesh establishment
-5. Syncthing API key discovery
-6. Symlink creation for CLI access
-7. Health diagnostics
+The wizard handles SSH keys, config files, script deployment, cross-machine mesh, Syncthing discovery, symlinks, and health checks — all in one run.
 
-### Usage / 使用
+See [docs/deployment-guide.md](docs/deployment-guide.md) for the full step-by-step guide.
 
-```bash
-# Execute command on remote machine
-remote-exec workstation-a "nvidia-smi"
+## Safety Model
 
-# Background task
-remote-exec workstation-a --bg "python3 train.py --epochs 100"
-remote-exec workstation-a --bg-list
-remote-exec workstation-a --bg-log <task_id>
+Not all commands are equal. The system classifies every command before execution:
 
-# Broadcast to all machines
-remote-exec all "uptime"
+| Tier | Examples | Behavior |
+|:---|:---|:---|
+| **Safe** | `ls`, `hostname`, `df`, `nvidia-smi` | Execute directly |
+| **Needs Confirmation** | `python3 train.py`, `pip install` | Ask human first |
+| **Dangerous** | `rm -rf`, `sudo`, `reboot` | Explicit warning + confirmation |
 
-# File transfer
-remote-sync push workstation-a ./data/model.pt /home/alice/Desktop/Share/model.pt
+Shell metacharacters (`;`, `&&`, `|`, `$()`) **always** require confirmation — preventing injection attacks like `echo $(rm -rf /)` from sneaking through as "safe".
 
-# Syncthing status
-remote-sync st-status
+## Technology Stack
 
-# Health check
-remote-collab-doctor
-```
+| Layer | Technology | Role |
+|:---|:---|:---|
+| Network | [Tailscale](https://tailscale.com/) | Mesh VPN, NAT traversal, encryption |
+| Transport | SSH | Authenticated command execution |
+| File Sync | rsync + [Syncthing](https://syncthing.net/) | On-demand + continuous sync |
+| Agent | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | AI coding assistant with skill system |
+| Config | Bash (restricted parser) | Simple, no YAML deps |
 
-## Deployment Lessons / 部署经验
+## Lessons from Real Deployment
 
-Real-world deployment across 3 machines revealed key challenges that require **human-agent collaboration**:
+Deploying across 3 machines revealed challenges that require **human-agent collaboration**:
 
-在三台机器上的实际部署揭示了需要**人机协作**的关键挑战：
-
-| Challenge / 挑战 | Solution / 解决方案 |
+| Challenge | Solution |
 |:---|:---|
-| First SSH auth needs password | Human runs `ssh-copy-id` once / 人类执行一次 `ssh-copy-id` |
+| First SSH auth needs password | Human runs `ssh-copy-id` once |
 | Missing `openssh-server` | Human installs: `sudo apt install openssh-server` |
 | Different usernames per machine | Config explicitly specifies each: `HOSTS_x="bob@host:22"` |
-| `authorized_keys` corruption | Use `ssh-copy-id`, never manual paste / 使用工具，不手动粘贴 |
+| `authorized_keys` corruption | Use `ssh-copy-id`, never manual paste |
 | Syncthing needs Tailscale IPs | Address must be `tcp://100.64.x.x:22000`, not hostname |
 | macOS bash 3.2 limitations | Scripts handle: no `mapfile`, no `flock`, no `grep -oP` |
-| Cross-machine SSH mesh | Setup script auto-generates keys and distributes / 自动生成并分发密钥 |
+| Cross-machine SSH mesh | Setup script auto-generates keys and distributes |
 
-See [docs/reference.md](docs/reference.md) for the complete troubleshooting guide (10 documented issues with solutions).
+See [docs/reference.md](docs/reference.md) for 10 documented issues with solutions.
 
-详见 [docs/reference.md](docs/reference.md) 获取完整的问题排查指南（10个已记录的问题及解决方案）。
+## Project Structure
 
-## Design Philosophy / 设计哲学
+```
+remote-collab-agents/
+├── scripts/
+│   ├── common.sh              # Shared library: config, safety, host resolution
+│   ├── remote-exec.sh         # Remote execution (fg/bg/broadcast)
+│   ├── remote-sync.sh         # rsync + Syncthing management
+│   ├── remote-wrapper.sh      # Background task lifecycle
+│   ├── doctor.sh              # Distributed health diagnostics
+│   └── setup-ssh-keys.sh      # Setup wizard (11 steps)
+├── skills/
+│   ├── remote-exec.md         # Claude Code skill: remote execution
+│   └── remote-sync.md         # Claude Code skill: file sync
+├── docs/
+│   ├── design.md              # Architecture design
+│   ├── reference.md           # Operations reference + troubleshooting
+│   └── deployment-guide.md    # Step-by-step deployment guide
+└── config/
+    └── hosts.conf.example     # Configuration template
+```
 
-### Security First / 安全优先
-- Three-tier command classification prevents accidental destruction
-- Config parser rejects `$()`, backticks, `${}` — no code injection
-- SSH commands built as arrays (no `eval`)
-- JSON constructed via `python3 json.dumps()` (no string interpolation)
-- Task IDs validated against path traversal: `^[a-zA-Z0-9._-]+$`
+## Contributing
 
-### Platform Agnostic / 平台无关
-- Works on macOS (bash 3.2) and Linux (bash 4+)
-- Handles GNU vs BSD differences (`stat`, `date`, `md5`)
-- No `setsid` on macOS? Falls back to `bash &`
-- No `flock` on macOS? Skips locking (accepts concurrency risk)
-- No `/proc` on macOS? Uses `ps` for PID verification
+This project emerged from hands-on deployment experience. Contributions welcome:
 
-### Progressive Trust / 渐进式信任
-- Safe commands execute immediately — no friction for routine operations
-- Dangerous commands require explicit human confirmation
-- Shell metacharacters always trigger review — even in "safe" commands
-- Background tasks use PID identity verification to prevent false positives from PID recycling
+- **New machine types** — tested on macOS + Ubuntu; Windows WSL, Raspberry Pi, cloud VMs untested
+- **New agents** — currently built for Claude Code; adapting for Codex, Gemini Code Assist, etc.
+- **Security hardening** — the trust model can always be improved
+- **Documentation** — deployment guides for different environments
 
-### Agent Evolution / 智能体进化
-- One machine can be designated as the "skill source of truth"
-- Updated scripts can be deployed to all machines via `setup-ssh-keys.sh`
-- Each machine maintains its own config (different hosts, users, paths)
-- Doctor diagnostics ensure consistent deployment across the mesh
+Open an [issue](https://github.com/PluteW/remote-collab-agents/issues) or submit a PR.
 
-## Related Work / 相关工作
-
-This project draws inspiration from:
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — AI coding agent with extensible skill system
-- [Tailscale](https://tailscale.com/) — Zero-config mesh VPN
-- [Syncthing](https://syncthing.net/) — Continuous peer-to-peer file synchronization
-- Multi-agent systems research — distributed problem solving and cooperative AI
-
-## License / 许可证
+## License
 
 [MIT](LICENSE)
 
 ---
 
-*This project emerged from real deployment experience — every design decision and troubleshooting entry reflects an actual challenge encountered during multi-machine, multi-agent collaboration.*
+<details>
+<summary><b>🇨🇳 中文版 / Chinese Version</b></summary>
 
-*本项目源于真实部署经验 —— 每个设计决策和故障排查条目都反映了多机器、多智能体协作中实际遇到的挑战。*
+## Remote Collab Agents — 分布式 AI 智能体协作框架
+
+**你有 3 台机器，每台都跑着 Claude Code。它们怎么协作？**
+
+本项目让 AI 编程智能体能够**跨机器协作** —— 执行命令、同步文件、互相监控 —— 同时人类在信任关键决策中保持控制。
+
+> 源于 3 台机器（macOS + Ubuntu）的真实部署经验。每个设计决策和故障排查条目都反映了实际遇到的挑战。
+
+### 核心能力
+
+- **跨机器命令执行** — 前台、后台、广播到所有机器
+- **后台任务管理** — PID 验证、SSH 断开后存活、日志追踪
+- **双向文件同步** — rsync 按需传输、Syncthing 持续同步
+- **三级安全模型** — 安全 / 需确认 / 危险的命令分级
+- **Shell 注入防护** — 元字符始终触发人工审查
+- **分布式诊断** — doctor 检查所有机器的 SSH、Tailscale、Syncthing、脚本、PATH
+- **自动化安装向导** — 11 步流程：密钥生成、配置、部署、网格建立
+- **macOS + Linux** — bash 3.2（macOS）和 4+（Linux）兼容，处理 GNU/BSD 差异
+
+### 协作范式
+
+在这种范式下，每台机器运行自己的 AI 智能体。智能体可以：
+
+1. **跨机器委托任务** — "在 GPU 工作站上运行这个训练任务"
+2. **无缝共享文件** — 推送数据到共享文件夹，拉取结果
+3. **互相监控** — 健康检查、后台任务状态、同步状态
+4. **协同进化** — 一个智能体改进了技能，部署更新到其他所有智能体
+
+### 安全模型
+
+| 层级 | 示例 | 行为 |
+|:---|:---|:---|
+| **安全** | `ls`, `hostname`, `df` | 直接执行 |
+| **需确认** | `python3 train.py`, `pip install` | 先询问人类 |
+| **危险** | `rm -rf`, `sudo`, `reboot` | 明确警告 + 确认 |
+
+Shell 元字符（`;`、`&&`、`|`、`$()`）**始终**需要确认，防止注入攻击。
+
+### 快速开始
+
+```bash
+git clone https://github.com/PluteW/remote-collab-agents.git
+cd remote-collab-agents
+
+mkdir -p ~/.claude/skills/remote-collab/scripts
+cp scripts/* ~/.claude/skills/remote-collab/scripts/
+cp skills/* ~/.claude/skills/remote-collab/
+
+bash scripts/setup-ssh-keys.sh
+```
+
+### 部署经验
+
+在三台机器上的实际部署揭示了需要**人机协作**的关键挑战：
+
+| 挑战 | 解决方案 |
+|:---|:---|
+| 首次 SSH 需要密码 | 人类执行一次 `ssh-copy-id` |
+| 缺少 `openssh-server` | 人类安装：`sudo apt install openssh-server` |
+| 不同机器用户名不同 | 配置明确指定：`HOSTS_x="bob@host:22"` |
+| `authorized_keys` 损坏 | 使用 `ssh-copy-id`，不手动粘贴 |
+| Syncthing 需要 Tailscale IP | 地址必须是 `tcp://100.64.x.x:22000` |
+| macOS bash 3.2 限制 | 脚本已处理：无 `mapfile`、`flock`、`grep -oP` |
+| 跨机器 SSH 全网格 | 安装脚本自动生成密钥并分发 |
+
+详见 [docs/reference.md](docs/reference.md) 获取完整问题排查指南。
+
+</details>
